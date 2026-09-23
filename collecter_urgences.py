@@ -25,8 +25,7 @@ ENTETES = {
     "User-Agent": "Mozilla/5.0 (collecte de donnees ouvertes; "
                   "+https://github.com/JulienMiron/Donnees-Urgences)"
 }
-CLES = ["Nom_etablissement", "Nom_installation", "heure_extraction"]
-
+CLES = ["RSS", "Nom_etablissement", "Nom_installation", "No_permis_installation", "heure_extraction"]
 
 def telecharger() -> pd.DataFrame:
     r = requests.get(URL, headers=ENTETES, timeout=60)
