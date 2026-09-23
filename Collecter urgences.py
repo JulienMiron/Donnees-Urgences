@@ -23,7 +23,7 @@ DOSSIER = Path("data")
 ENTETES = {
     # Identifiez-vous poliment ; remplacez l'adresse par celle de votre dépôt.
     "User-Agent": "Mozilla/5.0 (collecte de donnees ouvertes; "
-                  "+https://github.com/VOTRE_COMPTE/urgences-qc)"
+                  "+https://github.com/JulienMiron/Donnees-Urgences)"
 }
 CLES = ["Nom_etablissement", "Nom_installation", "heure_extraction"]
 
