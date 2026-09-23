@@ -23,9 +23,11 @@ DOSSIER = Path("data")
 ENTETES = {
     # Identifiez-vous poliment ; remplacez l'adresse par celle de votre dépôt.
     "User-Agent": "Mozilla/5.0 (collecte de donnees ouvertes; "
-                  "+https://github.com/JulienMiron/Donnees-Urgences)"
+                  "+https://github.com/VOTRE_COMPTE/urgences-qc)"
 }
-CLES = ["RSS", "Nom_etablissement", "Nom_installation", "No_permis_installation", "heure_extraction"]
+CLES = ["RSS", "Nom_etablissement", "Nom_installation", "No_permis_installation",
+        "horodatage"]
+
 
 def telecharger() -> pd.DataFrame:
     r = requests.get(URL, headers=ENTETES, timeout=60)
@@ -41,7 +43,8 @@ def lire_csv(brut: bytes) -> pd.DataFrame:
             break
         except UnicodeDecodeError:
             continue
-    df = pd.read_csv(io.StringIO(texte), sep=None, engine="python", dtype=str)
+    df = pd.read_csv(io.StringIO(texte), sep=None, engine="python", dtype=str,
+                     keep_default_na=False)
     return normaliser(df)
 
 
@@ -54,13 +57,28 @@ def normaliser(df: pd.DataFrame) -> pd.DataFrame:
     df = df.rename(columns={col: "heure_extraction"})
     for c in df.columns:
         df[c] = df[c].str.strip()
+    df = ajouter_horodatage(df)
     df["collecte_utc"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return df
+
+
+def ajouter_horodatage(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    « heure_extraction » ne contient que l'heure (ex. 19:00:00), sans la date.
+    On la combine avec la date de « Mise_a_jour » (diffusion ~45 min plus tard).
+    Si le résultat tombe après la mise à jour, l'extraction date de la veille.
+    """
+    maj = pd.to_datetime(df["Mise_a_jour"], errors="coerce")
+    heure = pd.to_timedelta(df["heure_extraction"], errors="coerce")
+    horo = maj.dt.normalize() + heure
+    horo = horo.where(horo <= maj, horo - pd.Timedelta(days=1))
+    df["horodatage"] = horo.dt.strftime("%Y-%m-%d %H:%M:%S")
     return df
 
 
 def fusionner(nouveau: pd.DataFrame) -> None:
     DOSSIER.mkdir(exist_ok=True)
-    dates = pd.to_datetime(nouveau["heure_extraction"], errors="coerce")
+    dates = pd.to_datetime(nouveau["horodatage"], errors="coerce")
     mois = dates.dt.strftime("%Y-%m").fillna(
         datetime.now(timezone.utc).strftime("%Y-%m"))
 
@@ -69,10 +87,12 @@ def fusionner(nouveau: pd.DataFrame) -> None:
         fichier = DOSSIER / f"urgences_{m}.csv"
         if fichier.exists():
             ancien = pd.read_csv(fichier, dtype=str, keep_default_na=False)
+            if "horodatage" not in ancien.columns:   # lignes d'avant la correction
+                ancien = ajouter_horodatage(ancien)
             bloc = pd.concat([ancien, bloc], ignore_index=True)
         avant = len(bloc)
         bloc = (bloc.drop_duplicates(subset=cles, keep="last")
-                    .sort_values(["heure_extraction", "Nom_installation"]))
+                    .sort_values(["horodatage", "RSS", "Nom_installation"]))
         bloc.to_csv(fichier, index=False, encoding="utf-8")
         print(f"{fichier} : {len(bloc)} lignes ({avant - len(bloc)} doublons retirés)")
 

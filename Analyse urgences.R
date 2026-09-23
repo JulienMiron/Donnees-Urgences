@@ -22,23 +22,28 @@ names(brut)  # À VÉRIFIER : adaptez les noms ci-dessous s'ils diffèrent
 # Certains nombres peuvent avoir une virgule décimale ou « non disponible »
 en_nombre <- function(x) suppressWarnings(as.numeric(gsub(",", ".", x)))
 
-urg <- brut |>
-  transmute(
-    rss           = RSS,
-    region        = Region,
-    etablissement = Nom_etablissement,
-    installation  = Nom_installation,
-    t = parse_date_time(heure_extraction,
-                        orders = c("Ymd HMS", "Ymd HM", "dmY HMS", "dmY HM"),
-                        tz = "America/Toronto"),
-    civieres  = en_nombre(Nombre_de_civieres_fonctionnelles),
-    occupees  = en_nombre(Nombre_de_civieres_occupees),
-    plus24    = en_nombre(Nombre_de_patients_sur_civieres_plus_de_24_heures),
-    plus48    = en_nombre(Nombre_de_patients_sur_civieres_plus_de_48_heures),
-    presents  = en_nombre(Nombre_total_de_patients_presents_a_lurgence),
-    attente   = en_nombre(Nombre_total_de_patients_en_attente_de_PEC),
-    dms_civiere     = en_nombre(DMS_sur_civiere),
-    dms_ambulatoire = en_nombre(DMS_ambulatoire)
+# Trouve une colonne par mot-clé, quelle que soit l'orthographe exacte
+colonne <- function(motif) {
+  n <- grep(motif, names(brut), ignore.case = TRUE, value = TRUE)
+  if (length(n) != 1) stop("Motif « ", motif, " » : ", length(n), " colonne(s) trouvée(s) : ",
+                           paste(n, collapse = ", "))
+  brut[[n]]
+}
+
+urg <- tibble(
+    rss           = colonne("^RSS$"),
+    region        = colonne("^Region"),
+    etablissement = colonne("etablissement"),
+    installation  = colonne("^Nom_installation"),
+    t = ymd_hms(colonne("^horodatage$"), tz = "America/Toronto"),
+    civieres  = en_nombre(colonne("fonctionnelles")),
+    occupees  = en_nombre(colonne("occupees")),
+    plus24    = en_nombre(colonne("24")),
+    plus48    = en_nombre(colonne("48")),
+    presents  = en_nombre(colonne("presents")),
+    attente   = en_nombre(colonne("PEC")),
+    dms_civiere     = en_nombre(colonne("^DMS_sur_civiere$")),
+    dms_ambulatoire = en_nombre(colonne("^DMS_ambulatoire$"))
   ) |>
   mutate(
     heure       = hour(t),
