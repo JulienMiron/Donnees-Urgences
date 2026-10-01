@@ -1,9 +1,11 @@
 name: Collecte urgences
 
 on:
-  schedule:
-    - cron: "20 * * * *"   # chaque heure, 20 min après l'heure (UTC)
-  workflow_dispatch:        # permet un lancement manuel
+  # La collecte planifiée est faite par collecte.sh sur le Mac.
+  # Pour la réactiver sur GitHub, remettez :
+  #   schedule:
+  #     - cron: "20 * * * *"
+  workflow_dispatch:        # lancement manuel seulement
 
 permissions:
   contents: write
