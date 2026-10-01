@@ -48,6 +48,7 @@
   .principal { display: grid; gap: 16px; grid-template-columns: 1fr; }
   @media (min-width: 900px) { .principal { grid-template-columns: 1.25fr 1fr; align-items: start; } }
   #carte { height: 480px; border-radius: 10px; border: 1px solid var(--bord); }
+  #carte.sombre .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(.95) contrast(.9); }
   #sans-carte { display: none; color: var(--discret); padding: 24px 0; }
   table { width: 100%; border-collapse: collapse; font-size: .92rem; }
   th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--bord); vertical-align: middle; }
@@ -240,9 +241,10 @@ function initCarte() {
   }
   carte = L.map("carte", { scrollWheelZoom: false }).setView([47.2, -72], 5);
   const sombre = matchMedia("(prefers-color-scheme: dark)").matches;
-  L.tileLayer(`https://{s}.basemaps.cartocdn.com/${sombre ? "dark_all" : "light_all"}/{z}/{x}/{y}{r}.png`, {
-    maxZoom: 14, attribution: "© OpenStreetMap, © CARTO",
+  L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 16, attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
   }).addTo(carte);
+  if (sombre) document.getElementById("carte").classList.add("sombre");
   couche = L.layerGroup().addTo(carte);
 }
 
