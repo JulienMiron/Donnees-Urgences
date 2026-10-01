@@ -1,0 +1,370 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Urgences du Québec en direct</title>
+<meta name="description" content="Taux d'occupation des civières dans les urgences du Québec, mis à jour chaque heure à partir des données ouvertes du MSSS.">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+  :root {
+    --fond: #f6f5f1; --carte: #ffffff; --texte: #1d2330; --discret: #5d6575;
+    --bord: #dcdad2; --accent: #1f4e79;
+    --b-normal: #3f9b6f; --b-modere: #d9a62b; --b-eleve: #e0762c; --b-tres: #b3282d;
+    --b-normal-t: #0f5a3a; --b-modere-t: #6b4d00; --b-eleve-t: #7a3405; --b-tres-t: #7d1318;
+    --vide: #ebe9e2;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --fond: #14171d; --carte: #1c2029; --texte: #e8eaee; --discret: #9aa2b1;
+      --bord: #2e3441; --accent: #7fb3e6;
+      --b-normal: #4cb583; --b-modere: #e3b94a; --b-eleve: #ee8c45; --b-tres: #e4575c;
+      --b-normal-t: #8fdcb8; --b-modere-t: #f0d27f; --b-eleve-t: #f6b88a; --b-tres-t: #f4a1a4;
+      --vide: #252a35;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--fond); color: var(--texte);
+         font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .page { max-width: 1180px; margin: 0 auto; padding: 24px 16px 48px; }
+  header h1 { margin: 0 0 4px; font-size: clamp(1.6rem, 3vw, 2.2rem); letter-spacing: -0.01em; }
+  header p { margin: 0; color: var(--discret); }
+  .alerte { margin: 16px 0 0; padding: 10px 14px; border-radius: 8px; background: #fff3d6;
+            color: #5c4400; border: 1px solid #ecd28a; display: none; }
+  @media (prefers-color-scheme: dark) { .alerte { background: #3a2f10; color: #f0d27f; border-color: #6b5518; } }
+  section { margin-top: 28px; }
+  h2 { font-size: 1.15rem; margin: 0 0 10px; }
+  .grille-kpi { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); margin-top: 22px; }
+  .kpi { background: var(--carte); border: 1px solid var(--bord); border-radius: 12px; padding: 14px 16px; }
+  .kpi .v { font-size: 2rem; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; }
+  .kpi .l { color: var(--discret); font-size: .9rem; margin-top: 4px; }
+  .panneau { background: var(--carte); border: 1px solid var(--bord); border-radius: 12px; padding: 16px; }
+  .controles { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 12px; }
+  select { font: inherit; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--bord);
+           background: var(--carte); color: var(--texte); }
+  .legende { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: .85rem; color: var(--discret); }
+  .legende span::before { content: ""; display: inline-block; width: .8em; height: .8em; border-radius: 50%;
+                          margin-right: 6px; vertical-align: -1px; background: var(--c); }
+  .principal { display: grid; gap: 16px; grid-template-columns: 1fr; }
+  @media (min-width: 900px) { .principal { grid-template-columns: 1.25fr 1fr; align-items: start; } }
+  #carte { height: 480px; border-radius: 10px; border: 1px solid var(--bord); }
+  #sans-carte { display: none; color: var(--discret); padding: 24px 0; }
+  table { width: 100%; border-collapse: collapse; font-size: .92rem; }
+  th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--bord); vertical-align: middle; }
+  th { font-weight: 600; color: var(--discret); font-size: .8rem; text-transform: uppercase; letter-spacing: .03em; }
+  td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
+  .nom small { display: block; color: var(--discret); font-size: .8rem; }
+  .pastille { display: inline-block; padding: 1px 8px; border-radius: 999px; font-weight: 600;
+              font-variant-numeric: tabular-nums; background: color-mix(in srgb, var(--c) 22%, transparent); color: var(--t); }
+  button.plus { margin-top: 10px; font: inherit; padding: 6px 12px; border-radius: 8px; cursor: pointer;
+                border: 1px solid var(--bord); background: transparent; color: var(--accent); }
+  .barres .rang { display: grid; grid-template-columns: minmax(120px, 190px) 1fr 52px; gap: 10px; align-items: center; padding: 3px 0; font-size: .9rem; }
+  .barres .piste { height: 14px; background: var(--vide); border-radius: 7px; position: relative; overflow: hidden; }
+  .barres .plein { height: 100%; border-radius: 7px; background: var(--c); }
+  .barres .cent { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--texte); opacity: .5; }
+  .barres .pct { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+  svg.courbe { width: 100%; height: auto; display: block; }
+  svg.courbe text { fill: var(--discret); font-size: 11px; }
+  .chaleur { display: grid; grid-template-columns: 38px repeat(24, 1fr); gap: 2px; font-size: .72rem; color: var(--discret); }
+  .chaleur .cell { height: 24px; border-radius: 3px; background: var(--vide); }
+  .chaleur .etiq { display: flex; align-items: center; }
+  .chaleur .heure { text-align: center; }
+  .note { color: var(--discret); font-size: .85rem; margin: 8px 0 0; }
+  footer { margin-top: 36px; color: var(--discret); font-size: .85rem; }
+  footer a, .note a { color: var(--accent); }
+  .leaflet-popup-content { font: 14px/1.4 system-ui, sans-serif; }
+</style>
+</head>
+<body>
+<div class="page">
+  <header>
+    <h1>Urgences du Québec en direct</h1>
+    <p>Occupation des civières, installation par installation. Dernier relevé : <strong id="maj">…</strong> (heure du Québec)</p>
+    <div class="alerte" id="alerte" role="status"></div>
+  </header>
+
+  <div class="grille-kpi" id="kpi" aria-label="Situation dans l'ensemble du Québec"></div>
+
+  <section>
+    <h2>Carte et palmarès</h2>
+    <div class="panneau">
+      <div class="controles">
+        <label>Région&nbsp;
+          <select id="filtre-region"><option value="">Toutes les régions</option></select>
+        </label>
+        <div class="legende" id="legende"></div>
+      </div>
+      <div class="principal">
+        <div>
+          <div id="carte" role="img" aria-label="Carte des urgences du Québec colorées selon le taux d'occupation"></div>
+          <div id="sans-carte">La carte n'est pas disponible : les coordonnées des installations n'ont pas encore été chargées.</div>
+          <p class="note">Le diamètre d'un cercle reflète le nombre de civières fonctionnelles.</p>
+        </div>
+        <div>
+          <table>
+            <thead><tr><th>Installation</th><th class="n">Occupation</th><th class="n">En attente</th><th class="n">&gt;&nbsp;24&nbsp;h</th></tr></thead>
+            <tbody id="palmares"></tbody>
+          </table>
+          <button class="plus" id="plus" hidden>Tout afficher</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Occupation par région</h2>
+    <div class="panneau barres" id="regions"></div>
+  </section>
+
+  <section>
+    <h2>Dernière semaine, ensemble du Québec</h2>
+    <div class="panneau" id="historique"></div>
+  </section>
+
+  <section>
+    <h2>Quand est-ce le plus occupé ?</h2>
+    <div class="panneau">
+      <div class="chaleur" id="chaleur"></div>
+      <p class="note" id="note-profil"></p>
+    </div>
+  </section>
+
+  <footer>
+    <p>Données : <a href="https://www.donneesquebec.ca/recherche/dataset/fichier-horaire-des-donnees-de-la-situation-a-l-urgence">Fichier horaire des données de la situation à l'urgence</a>,
+    Ministère de la Santé et des Services sociaux, licence <a href="https://creativecommons.org/licenses/by/4.0/deed.fr">CC BY 4.0</a>,
+    issues de la Console provinciale des urgences. Un taux d'occupation supérieur à 100&nbsp;% signifie que des patients sont sur des civières
+    supplémentaires. Ces chiffres sont fournis à titre informatif seulement et ne remplacent pas un avis médical : en cas d'urgence, appelez le 9-1-1.
+    Ce site n'est pas affilié au MSSS ni à Santé Québec.</p>
+  </footer>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+"use strict";
+const BANDES = [
+  { max: 75,       cls: "normal", nom: "Normal (moins de 75 %)" },
+  { max: 100,      cls: "modere", nom: "Modéré (75 à 99 %)" },
+  { max: 150,      cls: "eleve",  nom: "Élevé (100 à 149 %)" },
+  { max: Infinity, cls: "tres",   nom: "Très élevé (150 % et plus)" },
+];
+const JOURS = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
+const NB = new Intl.NumberFormat("fr-CA");
+const PAR_PAGE = 15;
+
+const bande = t => t == null ? null : BANDES.find(b => t < b.max);
+const couleur = t => t == null ? "var(--vide)" : `var(--b-${bande(t).cls})`;
+const couleurTexte = t => t == null ? "var(--texte)" : `var(--b-${bande(t).cls}-t)`;
+const pct = t => t == null ? "—" : Math.round(t) + " %";
+const num = v => v == null ? "—" : NB.format(v);
+
+function el(tag, attrs = {}, ...enfants) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === "style") e.setAttribute("style", v); else if (k === "text") e.textContent = v; else e.setAttribute(k, v);
+  }
+  for (const c of enfants) e.append(c);
+  return e;
+}
+function pastille(t) {
+  return el("span", { class: "pastille", text: pct(t), style: `--c:${couleur(t)};--t:${couleurTexte(t)}` });
+}
+const json = async f => {
+  const r = await fetch(`data/${f}.json?v=${Date.now()}`);
+  if (!r.ok) throw new Error(`${f}.json : ${r.status}`);
+  return r.json();
+};
+
+let actuel, installations = [], carte, couche, tout = false;
+
+async function demarrer() {
+  try {
+    const [a, h, p] = await Promise.all([json("actuel"), json("historique"), json("profil")]);
+    actuel = a; installations = a.installations;
+    afficherEntete(a); afficherKpi(a.quebec); afficherLegende();
+    remplirFiltre(); initCarte(); majVue();
+    afficherRegions(a.regions); afficherHistorique(h); afficherProfil(p);
+  } catch (e) {
+    document.getElementById("alerte").style.display = "block";
+    document.getElementById("alerte").textContent = "Impossible de charger les données : " + e.message;
+  }
+}
+
+function afficherEntete(a) {
+  const [d, hm] = a.mis_a_jour.split(" ");
+  const [y, m, j] = d.split("-").map(Number), [hh, mm] = hm.split(":").map(Number);
+  document.getElementById("maj").textContent =
+    new Date(y, m - 1, j, hh, mm).toLocaleString("fr-CA", { dateStyle: "long", timeStyle: "short" });
+  // Âge des données, comparé à l'heure actuelle au Québec
+  const maintenant = new Date().toLocaleString("sv-SE", { timeZone: "America/Toronto" }).replace(" ", "T");
+  const age = (new Date(maintenant) - new Date(y, m - 1, j, hh, mm)) / 3.6e6;
+  if (age > 3) {
+    const al = document.getElementById("alerte");
+    al.style.display = "block";
+    al.textContent = age < 48
+      ? `Les données ont environ ${Math.round(age)} h : la collecte automatique est peut-être interrompue.`
+      : `Les données datent de ${Math.round(age / 24)} jours : la collecte automatique est probablement interrompue.`;
+  }
+}
+
+function afficherKpi(q) {
+  const tuiles = [
+    [pct(q.taux), "Occupation des civières", couleurTexte(q.taux)],
+    [num(q.presents), "Personnes à l'urgence", null],
+    [num(q.attente), "En attente de prise en charge", null],
+    [num(q.plus24), "Sur civière depuis plus de 24 h", null],
+  ];
+  const c = document.getElementById("kpi");
+  for (const [v, l, col] of tuiles) {
+    c.append(el("div", { class: "kpi" }, el("div", { class: "v", text: v, style: col ? `color:${col}` : "" }), el("div", { class: "l", text: l })));
+  }
+}
+
+function afficherLegende() {
+  const l = document.getElementById("legende");
+  for (const b of BANDES) l.append(el("span", { text: b.nom, style: `--c:var(--b-${b.cls})` }));
+}
+
+function remplirFiltre() {
+  const s = document.getElementById("filtre-region");
+  const noms = [...new Set(installations.map(i => i.region))].sort((a, b) => a.localeCompare(b, "fr"));
+  for (const n of noms) s.append(el("option", { value: n, text: n }));
+  s.addEventListener("change", () => { tout = false; majVue(); });
+  document.getElementById("plus").addEventListener("click", () => { tout = !tout; majVue(); });
+}
+
+function initCarte() {
+  if (!installations.some(i => i.lat != null)) {
+    document.getElementById("carte").style.display = "none";
+    document.getElementById("sans-carte").style.display = "block";
+    return;
+  }
+  carte = L.map("carte", { scrollWheelZoom: false }).setView([47.2, -72], 5);
+  const sombre = matchMedia("(prefers-color-scheme: dark)").matches;
+  L.tileLayer(`https://{s}.basemaps.cartocdn.com/${sombre ? "dark_all" : "light_all"}/{z}/{x}/{y}{r}.png`, {
+    maxZoom: 14, attribution: "© OpenStreetMap, © CARTO",
+  }).addTo(carte);
+  couche = L.layerGroup().addTo(carte);
+}
+
+function popup(i) {
+  const d = el("div", {}, el("strong", { text: i.nom }));
+  if (i.municipalite) d.append(el("div", { text: `${i.municipalite} · ${i.region}` }));
+  d.append(el("div", { text: `Occupation : ${pct(i.taux)} (${num(i.occupees)} civières occupées sur ${num(i.civieres)})` }),
+           el("div", { text: `En attente de prise en charge : ${num(i.attente)}` }),
+           el("div", { text: `Sur civière depuis plus de 24 h : ${num(i.plus24)}` }));
+  return d;
+}
+
+function majVue() {
+  const region = document.getElementById("filtre-region").value;
+  const liste = installations.filter(i => !region || i.region === region);
+
+  if (carte) {
+    couche.clearLayers();
+    const pts = [];
+    for (const i of liste) {
+      if (i.lat == null) continue;
+      const m = L.circleMarker([i.lat, i.lon], {
+        radius: 5 + Math.sqrt(i.civieres || 1) * 0.9, weight: 1, color: "#ffffff",
+        fillColor: getComputedStyle(document.documentElement).getPropertyValue(`--b-${bande(i.taux)?.cls || "normal"}`).trim(),
+        fillOpacity: i.taux == null ? 0.3 : 0.82,
+      }).bindPopup(popup(i));
+      m.addTo(couche); pts.push([i.lat, i.lon]);
+    }
+    if (pts.length) carte.fitBounds(pts, { padding: [30, 30], maxZoom: region ? 10 : 7 });
+  }
+
+  const tb = document.getElementById("palmares"); tb.replaceChildren();
+  const visibles = tout ? liste : liste.slice(0, PAR_PAGE);
+  for (const i of visibles) {
+    tb.append(el("tr", {},
+      el("td", { class: "nom" }, i.nom, el("small", { text: i.municipalite ? `${i.municipalite} · ${i.region}` : i.region })),
+      el("td", { class: "n" }, pastille(i.taux)),
+      el("td", { class: "n", text: num(i.attente) }),
+      el("td", { class: "n", text: num(i.plus24) })));
+  }
+  const plus = document.getElementById("plus");
+  plus.hidden = liste.length <= PAR_PAGE;
+  plus.textContent = tout ? "Réduire" : `Tout afficher (${liste.length})`;
+}
+
+function afficherRegions(regions) {
+  const c = document.getElementById("regions");
+  const max = Math.max(150, ...regions.map(r => r.taux || 0));
+  for (const r of regions) {
+    c.append(el("div", { class: "rang" },
+      el("div", { text: r.region }),
+      el("div", { class: "piste" },
+        el("div", { class: "plein", style: `width:${Math.min(100, (r.taux || 0) / max * 100)}%;--c:${couleur(r.taux)}` }),
+        el("div", { class: "cent", style: `left:${100 / max * 100}%` })),
+      el("div", { class: "pct", text: pct(r.taux) })));
+  }
+  c.append(el("p", { class: "note", text: "Le trait vertical marque 100 % : au-delà, il y a plus de patients que de civières fonctionnelles." }));
+}
+
+function afficherHistorique(h) {
+  const c = document.getElementById("historique");
+  const v = h.quebec.taux;
+  if (h.t.length < 2) {
+    c.append(el("p", { class: "note", text: `L'historique se construit au fil des relevés horaires (${h.t.length} relevé pour l'instant). La courbe apparaîtra bientôt.` }));
+    return;
+  }
+  const W = 800, H = 240, g = 44, d = 14, b = 28;
+  const xs = h.t.map(s => new Date(s.replace(" ", "T")).getTime());
+  const x0 = xs[0], x1 = xs[xs.length - 1];
+  const vals = v.filter(x => x != null);
+  const ymax = Math.ceil(Math.max(120, ...vals) / 20) * 20, ymin = Math.floor(Math.min(80, ...vals) / 20) * 20;
+  const X = t => g + (t - x0) / Math.max(1, x1 - x0) * (W - g - d);
+  const Y = y => H - b - (y - ymin) / (ymax - ymin) * (H - b - d);
+  const ns = "http://www.w3.org/2000/svg";
+  const s = document.createElementNS(ns, "svg");
+  s.setAttribute("viewBox", `0 0 ${W} ${H}`); s.setAttribute("class", "courbe");
+  s.setAttribute("role", "img"); s.setAttribute("aria-label", "Taux d'occupation des civières dans l'ensemble du Québec, sept derniers jours");
+  const add = (tag, a, txt) => { const e = document.createElementNS(ns, tag); for (const k in a) e.setAttribute(k, a[k]); if (txt) e.textContent = txt; s.append(e); return e; };
+  for (let y = ymin; y <= ymax; y += 20) {
+    add("line", { x1: g, x2: W - d, y1: Y(y), y2: Y(y), stroke: "var(--bord)", "stroke-width": 1 });
+    add("text", { x: g - 6, y: Y(y) + 4, "text-anchor": "end" }, y + " %");
+  }
+  add("line", { x1: g, x2: W - d, y1: Y(100), y2: Y(100), stroke: "var(--texte)", "stroke-width": 1.2, "stroke-dasharray": "5 4", opacity: .55 });
+  const jour0 = new Date(x0); jour0.setHours(24, 0, 0, 0);
+  for (let t = jour0.getTime(); t <= x1; t += 864e5) {
+    const dt = new Date(t);
+    add("text", { x: X(t), y: H - 8, "text-anchor": "middle" }, `${JOURS[(dt.getDay() + 6) % 7]} ${dt.getDate()}`);
+  }
+  let trace = "";
+  v.forEach((y, i) => { if (y != null) trace += (trace && v[i - 1] != null ? "L" : "M") + X(xs[i]).toFixed(1) + " " + Y(y).toFixed(1); });
+  add("path", { d: trace, fill: "none", stroke: "var(--accent)", "stroke-width": 2, "stroke-linejoin": "round" });
+  c.append(s);
+}
+
+function afficherProfil(p) {
+  const c = document.getElementById("chaleur");
+  const vals = p.cellules.map(x => x.taux).filter(x => x != null);
+  const note = document.getElementById("note-profil");
+  if (!vals.length) { note.textContent = "Pas encore assez de relevés."; return; }
+  const lo = Math.min(...vals), hi = Math.max(...vals);
+  c.append(el("div"));
+  for (let h = 0; h < 24; h++) c.append(el("div", { class: "heure", text: h % 3 === 0 ? String(h) : "" }));
+  const index = new Map(p.cellules.map(x => [x.jour * 24 + x.heure, x]));
+  JOURS.forEach((nom, j) => {
+    c.append(el("div", { class: "etiq", text: nom }));
+    for (let h = 0; h < 24; h++) {
+      const x = index.get(j * 24 + h);
+      const cell = el("div", { class: "cell" });
+      if (x && x.taux != null) {
+        const f = hi === lo ? 0.5 : (x.taux - lo) / (hi - lo);
+        cell.style.background = `color-mix(in srgb, var(--b-tres) ${Math.round(12 + f * 88)}%, var(--vide))`;
+        cell.title = `${nom} ${h} h : ${Math.round(x.taux)} % en moyenne (${x.n} relevé${x.n > 1 ? "s" : ""})`;
+      }
+      c.append(cell);
+    }
+  });
+  note.textContent = p.jours_couverts < 14
+    ? `Profil provisoire : calculé sur ${p.jours_couverts} jour${p.jours_couverts > 1 ? "s" : ""} de relevés. Plus la collecte avance, plus il devient fiable. Plus la case est foncée, plus l'occupation moyenne est élevée.`
+    : `Occupation moyenne des civières, ensemble du Québec, selon le jour de la semaine et l'heure (${p.jours_couverts} jours de relevés). Plus la case est foncée, plus c'est occupé.`;
+}
+
+demarrer();
+</script>
+</body>
+</html>

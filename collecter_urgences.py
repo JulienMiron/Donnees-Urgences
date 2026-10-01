@@ -21,9 +21,9 @@ URL = ("https://www.msss.gouv.qc.ca/professionnels/statistiques/documents/"
        "urgences/Releve_horaire_urgences_7jours_nbpers.csv")
 DOSSIER = Path("data")
 ENTETES = {
-    # Identifiez-vous poliment ; remplacez l'adresse par celle de votre dépôt.
+    # Identifiez-vous poliment : adresse de votre dépôt.
     "User-Agent": "Mozilla/5.0 (collecte de donnees ouvertes; "
-                  "+https://github.com/VOTRE_COMPTE/urgences-qc)"
+                  "+https://github.com/JulienMiron/Donnees-Urgences)"
 }
 CLES = ["RSS", "Nom_etablissement", "Nom_installation", "No_permis_installation",
         "horodatage"]
